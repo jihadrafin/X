@@ -1,0 +1,88 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, LeakyReLU, BatchNormalization, Reshape, Flatten
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+
+# Define image shape and noise dimension
+img_shape = (28, 28, 1)
+z_dim = 100
+
+# Build the Generator model
+def build_generator():
+    model = Sequential()
+    model.add(Dense(256, input_dim=z_dim))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(BatchNormalization())
+    model.add(Dense(512))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(BatchNormalization())
+    model.add(Dense(1024))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(BatchNormalization())
+    model.add(Dense(np.prod(img_shape), activation='tanh'))
+    model.add(Reshape(img_shape))
+    return model
+
+# Build the Discriminator model
+def build_discriminator():
+    model = Sequential()
+    model.add(Flatten(input_shape=img_shape))
+    model.add(Dense(512))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(Dense(256))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(Dense(1, activation='sigmoid'))
+    return model
+
+# Build and compile the GAN model
+def build_gan(generator, discriminator):
+    model = Sequential()
+    model.add(generator)
+    model.add(discriminator)
+    return model
+
+# Compile models
+generator = build_generator()
+discriminator = build_discriminator()
+discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
+gan = build_gan(generator, discriminator)
+gan.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
+
+# Training function
+def train_gan(epochs=10000, batch_size=64):
+    for epoch in range(epochs):
+        # Generate random noise and create images
+        noise = np.random.normal(0, 1, (batch_size, z_dim))
+        generated_images = generator.predict(noise)
+        
+        # Train the Discriminator
+        real_images = np.random.rand(batch_size, 28, 28, 1)  # Simple random data used for demonstration
+        d_loss_real = discriminator.train_on_batch(real_images, np.ones((batch_size, 1)))
+        d_loss_fake = discriminator.train_on_batch(generated_images, np.zeros((batch_size, 1)))
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+        
+        # Train the GAN
+        noise = np.random.normal(0, 1, (batch_size, z_dim))
+        g_loss = gan.train_on_batch(noise, np.ones((batch_size, 1)))
+        
+        # Print progress and display images periodically
+        if epoch % 1000 == 0:
+            print(f"{epoch} [D loss: {d_loss[0]} | D accuracy: {100 * d_loss[1]}] [G loss: {g_loss}]")
+            plot_generated_images(generator)
+
+# Function to plot generated images
+def plot_generated_images(generator, examples=10, dim=(1, 10), figsize=(10, 1)):
+    noise = np.random.normal(0, 1, (examples, z_dim))
+    generated_images = generator.predict(noise)
+    generated_images = 0.5 * generated_images + 0.5
+    plt.figure(figsize=figsize)
+    for i in range(generated_images.shape[0]):
+        plt.subplot(dim[0], dim[1], i+1)
+        plt.imshow(generated_images[i, :, :, 0], cmap='gray')
+        plt.axis('off')
+    plt.show()
+
+# Start training the GAN
+train_gan()
